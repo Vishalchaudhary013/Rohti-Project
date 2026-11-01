@@ -54,3 +54,44 @@ def test_static_export_writes_all_figures(data, tmp_path):
     paths = visuals.export_static_figures(data, tmp_path, dpi=40)
     assert [p.name for p in paths] == list(visuals.FIGURE_CATALOG)
     assert all(p.stat().st_size > 1000 for p in paths)
+
+
+def test_donuts(data):
+    fig = visuals.outcome_donut(data)
+    pie = fig.data[0]
+    assert list(pie.labels) == [config.PASS_LABEL, config.FAIL_LABEL]
+    assert sum(pie.values) == len(data)
+    assert pie.marker.pattern.shape[1] == "/"
+    assert f"{len(data):,}" in fig.layout.annotations[0].text
+    sub = visuals.subject_donut(data)
+    assert list(sub.data[0].labels) == ["Mathematics", "Portuguese"]
+
+
+def test_model_figures():
+    import numpy as np
+    import pandas as pd
+
+    from src import modeling
+
+    table = pd.DataFrame(
+        {
+            "setting": ["A", "A", "B", "B"],
+            "model": ["LR", "RF"] * 2,
+            "f1": [0.8, 0.9, 0.6, 0.7],
+            "f1_std": [0.01] * 4,
+        }
+    )
+    assert len(visuals.metric_comparison_bar(table, "f1", "F1").data) == 2
+    cm = np.array([[5, 3], [2, 10]])
+    hm = visuals.confusion_heatmap(cm)
+    assert hm.data[0].text[0][0].startswith("<b>5</b>")
+    y = np.array([0, 0, 1, 1, 1, 0])
+    p = np.array([0.1, 0.4, 0.8, 0.6, 0.9, 0.3])
+    roc = visuals.roc_chart({"LR": modeling.roc_points(y, p)}, {"LR": 0.9})
+    assert "AUC 0.90" in roc.data[0].name
+    trade = visuals.threshold_tradeoff(modeling.threshold_curve(y, p), 0.4)
+    assert len(trade.data) == 2
+    s = pd.Series([0.5, -0.3, 0.1], index=["a", "b", "c"])
+    signed = visuals.importance_bar(s, "coef", signed=True)
+    assert signed.data[0].text[-1] == "+0.50"
+    assert visuals.importance_bar(s.abs(), "imp").data[0].marker.color == config.PASS_COLOR

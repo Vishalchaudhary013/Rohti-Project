@@ -40,6 +40,14 @@ ui.kpi_row(
 
 left, right = st.columns(2, gap="medium")
 with left:
+    ui.chart_title("Pass vs fail", "Share of all filtered records; the fail slice is hatched.")
+    ui.chart(visuals.outcome_donut(df), key="ov_donut_outcome")
+with right:
+    ui.chart_title("Records by subject")
+    ui.chart(visuals.subject_donut(df), key="ov_donut_subject")
+
+left, right = st.columns(2, gap="medium")
+with left:
     ui.chart_title("Pass rate by subject", "Bar labels show the pass rate; n is the group size.")
     ui.chart(visuals.pass_rate_bar(by_subject, config.SUBJECT_COL), by_subject, key="ov_subject")
 with right:

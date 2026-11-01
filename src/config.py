@@ -248,6 +248,13 @@ CATEGORICAL_SEQUENCE: Final[tuple[str, ...]] = (
     "#6250d6",  # 7 violet
     "#e34948",  # 8 red
 )
+# Series palette for charts that are NOT about pass/fail. Orange is reserved for "Fail",
+# so it is skipped here. Blue, aqua, yellow validated all-pairs (CVD ΔE >= 9, normal >= 22).
+SERIES_SEQUENCE: Final[tuple[str, ...]] = (
+    CATEGORICAL_SEQUENCE[0],
+    CATEGORICAL_SEQUENCE[2],
+    CATEGORICAL_SEQUENCE[3],
+)
 PASS_COLOR: Final[str] = CATEGORICAL_SEQUENCE[0]
 FAIL_COLOR: Final[str] = CATEGORICAL_SEQUENCE[1]
 OUTCOME_COLORS: Final[dict[str, str]] = {PASS_LABEL: PASS_COLOR, FAIL_LABEL: FAIL_COLOR}

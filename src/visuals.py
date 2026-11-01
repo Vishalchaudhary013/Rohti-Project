@@ -191,7 +191,7 @@ def g3_box(df: pd.DataFrame, by: str, height: int = 360) -> go.Figure:
     levels = sorted(df[by].dropna().unique().tolist())
     for i, level in enumerate(levels):
         values = df.loc[df[by] == level, config.TARGET_SOURCE]
-        color = config.CATEGORICAL_SEQUENCE[i % len(config.CATEGORICAL_SEQUENCE)]
+        color = config.SERIES_SEQUENCE[i % len(config.SERIES_SEQUENCE)]
         fig.add_box(
             y=values,
             name=f"{value_label(by, level)} (n={len(values):,})",
@@ -315,6 +315,7 @@ FIGURE_CATALOG: dict[str, str] = {
     "09_g2_vs_g3_scatter.png": "Second-period vs final grade (jittered)",
     "10_correlation_with_g3.png": "Correlation of numeric attributes with G3",
     "11_correlation_heatmap.png": "Correlation heatmap of numeric attributes",
+    "12_pass_fail_donut.png": "Share of passing vs failing records",
 }
 
 
@@ -394,7 +395,7 @@ def _static_box(ax, df: pd.DataFrame, by: str) -> None:
         patch_artist=True,
     )
     for i, box in enumerate(bp["boxes"]):
-        color = config.CATEGORICAL_SEQUENCE[i % len(config.CATEGORICAL_SEQUENCE)]
+        color = config.SERIES_SEQUENCE[i % len(config.SERIES_SEQUENCE)]
         box.set(facecolor="none", edgecolor=color, linewidth=1.5)
     ax.set_xlabel(axis_title(by))
     ax.set_ylabel(axis_title("G3"))
@@ -492,6 +493,28 @@ def export_static_figures(
             )
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="r")
 
+    def pass_donut(ax):
+        n_pass = int(df[config.PASS_COL].sum())
+        wedges, _ = ax.pie(
+            [n_pass, len(df) - n_pass],
+            colors=[config.PASS_COLOR, config.FAIL_COLOR],
+            startangle=90,
+            counterclock=False,
+            wedgeprops={"width": 0.38, "edgecolor": config.SURFACE, "linewidth": 2},
+        )
+        wedges[1].set_hatch("//")
+        share = n_pass / len(df) if len(df) else 0
+        ax.text(0, 0, f"{len(df):,}\nstudents", ha="center", va="center", fontsize=12)
+        ax.legend(
+            wedges,
+            [f"Pass {share:.1%}", f"Fail {1 - share:.1%}"],
+            loc="lower center",
+            bbox_to_anchor=(0.5, -0.12),
+            ncol=2,
+        )
+        ax.set_aspect("equal")
+        ax.grid(False)
+
     builders: dict[str, tuple[Callable, tuple[float, float]]] = {
         "01_g3_distribution.png": (hist, (9, 4.5)),
         "02_pass_rate_by_subject.png": (
@@ -523,6 +546,7 @@ def export_static_figures(
         "09_g2_vs_g3_scatter.png": (scatter, (6.5, 6)),
         "10_correlation_with_g3.png": (corr_bar, (7, 7)),
         "11_correlation_heatmap.png": (heatmap, (10, 9)),
+        "12_pass_fail_donut.png": (pass_donut, (5.5, 5.5)),
     }
     written: list[Path] = []
     for name, (draw, size) in builders.items():
@@ -535,3 +559,228 @@ def export_static_figures(
         plt.close(fig)
         written.append(path)
     return written
+
+
+# ---------------------------------------------------------------------------
+# Circle (donut) charts
+# ---------------------------------------------------------------------------
+def donut(
+    labels: list[str],
+    values: list[float],
+    colors: list[str],
+    center_title: str,
+    center_value: str,
+    patterns: list[str] | None = None,
+    height: int = 320,
+) -> go.Figure:
+    """Donut chart with labelled slices (name + share) and a centre total.
+
+    Slices carry text labels, and optional hatch patterns, so meaning never relies on colour.
+    """
+    fig = go.Figure(
+        go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.62,
+            sort=False,
+            direction="clockwise",
+            marker={
+                "colors": colors,
+                "line": {"color": config.SURFACE, "width": 2},
+                "pattern": {
+                    "shape": patterns or [""] * len(labels),
+                    "fgcolor": config.SURFACE,
+                    "size": 6,
+                    "solidity": 0.25,
+                    "fillmode": "overlay",
+                },
+            },
+            texttemplate="%{label}<br>%{percent:.1%}",
+            textposition="outside",
+            textfont={"color": config.INK_PRIMARY, "size": 12},
+            hovertemplate="%{label}: %{value:,} (%{percent:.1%})<extra></extra>",
+        )
+    )
+    fig.add_annotation(
+        text=f"<span style='font-size:22px;color:{config.INK_PRIMARY}'><b>{center_value}</b></span>"
+        f"<br><span style='font-size:12px;color:{config.INK_SECONDARY}'>{center_title}</span>",
+        showarrow=False,
+        x=0.5,
+        y=0.5,
+    )
+    fig.update_layout(showlegend=False)
+    fig = _style(fig, height=height)
+    fig.update_layout(margin={"l": 40, "r": 40, "t": 40, "b": 40})
+    return fig
+
+
+def outcome_donut(df: pd.DataFrame) -> go.Figure:
+    """Pass vs fail share as a donut (fail slice hatched)."""
+    n_pass = int(df[config.PASS_COL].sum())
+    n_fail = len(df) - n_pass
+    return donut(
+        [config.PASS_LABEL, config.FAIL_LABEL],
+        [n_pass, n_fail],
+        [config.PASS_COLOR, config.FAIL_COLOR],
+        "students",
+        f"{len(df):,}",
+        patterns=[
+            config.OUTCOME_PATTERNS[config.PASS_LABEL],
+            config.OUTCOME_PATTERNS[config.FAIL_LABEL],
+        ],
+    )
+
+
+def subject_donut(df: pd.DataFrame) -> go.Figure:
+    """Share of records per subject as a donut."""
+    counts = df[config.SUBJECT_COL].value_counts().sort_index()
+    return donut(
+        [value_label(config.SUBJECT_COL, s) for s in counts.index],
+        counts.tolist(),
+        [config.SERIES_SEQUENCE[i % len(config.SERIES_SEQUENCE)] for i in range(len(counts))],
+        "records",
+        f"{int(counts.sum()):,}",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Model evaluation figures
+# ---------------------------------------------------------------------------
+def metric_comparison_bar(table: pd.DataFrame, metric: str, label: str) -> go.Figure:
+    """Grouped bars of one metric (± std) per model, setting A vs B side by side."""
+    fig = go.Figure()
+    for i, setting in enumerate(config.FEATURE_SETTINGS):
+        part = table[table["setting"] == setting]
+        fig.add_bar(
+            x=part["model"],
+            y=part[metric],
+            name=f"Setting {setting}: {config.FEATURE_SETTINGS[setting]}",
+            marker={"color": config.SERIES_SEQUENCE[i]},
+            error_y={
+                "type": "data",
+                "array": part[f"{metric}_std"],
+                "color": config.INK_MUTED,
+                "thickness": 1,
+                "width": 4,
+            },
+            text=[f"{v:.2f}" for v in part[metric]],
+            textposition="inside",
+            insidetextanchor="start",
+            textfont={"color": "#ffffff"},
+            hovertemplate="%{x}<br>" + label + " %{y:.3f}<extra>Setting " + setting + "</extra>",
+        )
+    fig.update_layout(barmode="group", bargap=0.3, bargroupgap=0.08)
+    fig.update_yaxes(range=[0, 1.05], tickformat=".1f")
+    return _style(fig, "", label, 360)
+
+
+def confusion_heatmap(cm: np.ndarray) -> go.Figure:
+    """Confusion matrix (rows actual, cols predicted; order Fail, Pass) with counts and %."""
+    labels = [config.FAIL_LABEL, config.PASS_LABEL]
+    total = cm.sum() or 1
+    text = [[f"<b>{v:,}</b><br>{v / total:.1%}" for v in row] for row in cm]
+    seq = config.SEQUENTIAL_BLUE
+    fig = go.Figure(
+        go.Heatmap(
+            z=cm,
+            x=[f"Predicted {lab}" for lab in labels],
+            y=[f"Actual {lab}" for lab in labels],
+            colorscale=[[0, seq[0]], [1, seq[6]]],
+            text=text,
+            texttemplate="%{text}",
+            textfont={"size": 14},
+            showscale=False,
+            xgap=2,
+            ygap=2,
+            hovertemplate="%{y}, %{x}: %{z:,}<extra></extra>",
+        )
+    )
+    fig.update_yaxes(autorange="reversed")
+    fig.update_xaxes(side="top")
+    fig = _style(fig, "", "", 340)
+    fig.update_layout(margin={"l": 100, "r": 16, "t": 40, "b": 16})
+    return fig
+
+
+def roc_chart(curves: dict[str, pd.DataFrame], aucs: dict[str, float]) -> go.Figure:
+    """ROC curves for detecting fail, one line per model, plus the chance diagonal."""
+    fig = go.Figure()
+    for i, (name, pts) in enumerate(curves.items()):
+        fig.add_scatter(
+            x=pts["fpr"],
+            y=pts["tpr"],
+            mode="lines",
+            name=f"{name} (AUC {aucs[name]:.2f})",
+            line={"color": config.SERIES_SEQUENCE[i % len(config.SERIES_SEQUENCE)], "width": 2},
+            hovertemplate="False-alarm rate %{x:.2f}<br>Fail recall %{y:.2f}<extra>"
+            + name
+            + "</extra>",
+        )
+    fig.add_scatter(
+        x=[0, 1],
+        y=[0, 1],
+        mode="lines",
+        name="Chance (AUC 0.50)",
+        line={"color": config.INK_MUTED, "dash": "dot", "width": 1},
+        hoverinfo="skip",
+    )
+    fig.update_xaxes(range=[0, 1], showgrid=True)
+    fig.update_yaxes(range=[0, 1.02])
+    return _style(fig, "False-alarm rate (passing students flagged)", "Fail-class recall", 380)
+
+
+def threshold_tradeoff(curve: pd.DataFrame, threshold: float) -> go.Figure:
+    """Fail-class recall and precision vs decision threshold, with the chosen threshold marked."""
+    fig = go.Figure()
+    for i, (col, name, dash) in enumerate(
+        (
+            ("fail_recall", "Fail-class recall", "solid"),
+            ("fail_precision", "Fail-class precision", "dash"),
+        )
+    ):
+        fig.add_scatter(
+            x=curve["threshold"],
+            y=curve[col],
+            mode="lines",
+            name=name,
+            line={
+                "color": config.SERIES_SEQUENCE[i % len(config.SERIES_SEQUENCE)],
+                "width": 2,
+                "dash": dash,
+            },
+            hovertemplate="Threshold %{x:.2f}: %{y:.2f}<extra>" + name + "</extra>",
+        )
+    fig.add_vline(
+        x=threshold,
+        line={"color": config.INK_SECONDARY, "width": 1},
+        annotation_text=f"Chosen {threshold:.2f}",
+        annotation_font={"color": config.INK_SECONDARY, "size": 11},
+    )
+    fig.update_xaxes(range=[0.05, 0.95], showgrid=True)
+    fig.update_yaxes(range=[0, 1.02])
+    return _style(fig, "Decision threshold on P(fail)", "Score", 340)
+
+
+def importance_bar(values: pd.Series, title: str, top: int = 15, signed: bool = False) -> go.Figure:
+    """Horizontal bar of the top features; signed values use the diverging colours."""
+    data = values.head(top).iloc[::-1]
+    neg, pos = config.DIVERGING_SCALE[0][1], config.DIVERGING_SCALE[-1][1]
+    colors = [pos if v >= 0 else neg for v in data] if signed else config.PASS_COLOR
+    fig = go.Figure(
+        go.Bar(
+            x=data.to_numpy(),
+            y=data.index,
+            orientation="h",
+            marker={"color": colors},
+            text=[f"{v:+.2f}" if signed else f"{v:.3f}" for v in data],
+            textposition="outside",
+            textfont={"color": config.INK_PRIMARY, "size": 11},
+            hovertemplate="%{y}: %{x:.3f}<extra></extra>",
+            cliponaxis=False,
+        )
+    )
+    if signed:
+        lim = float(np.abs(data).max() * 1.25) or 1
+        fig.update_xaxes(range=[-lim, lim], zeroline=True, zerolinecolor=config.AXIS_LINE)
+    fig.update_xaxes(showgrid=True)
+    return _style(fig, title, "", max(320, 24 * len(data) + 90))
