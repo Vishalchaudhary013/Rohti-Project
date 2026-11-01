@@ -164,15 +164,43 @@ def test_prepare_skips_rejected_tables(frame):
     assert not reports["bad"].is_valid
 
 
-def test_prepare_upload_with_and_without_subject(frame):
-    df, _ = ingestion.prepare_upload(frame, "u.csv")
-    assert set(df["subject"]) == {config.DEFAULT_UPLOAD_SUBJECT}
-    frame["subject"] = ["mat"] * 20 + ["por"] * 20
-    df, _ = ingestion.prepare_upload(frame, "u.csv")
-    assert df["subject"].value_counts().to_dict() == {"mat": 20, "por": 20}
-    bad, rep = ingestion.prepare_upload(frame.drop(columns=["sex"]), "u.csv")
-    assert bad.empty
-    assert not rep["u.csv"].is_valid
+def test_infer_subject():
+    assert ingestion.infer_subject("student-mat.csv") == "mat"
+    assert ingestion.infer_subject("student_por.xlsx") == "por"
+    assert ingestion.infer_subject("Mathematics 2024.csv") == "mat"
+    assert ingestion.infer_subject("portuguese.csv") == "por"
+    assert ingestion.infer_subject("class_list.csv") == config.DEFAULT_UPLOAD_SUBJECT
+
+
+def test_prepare_uploads_mixed(frame):
+    with_subject = make_frame(40, 5)
+    with_subject["subject"] = ["mat"] * 15 + ["por"] * 25
+    bad = frame.drop(columns=["sex"])
+    frame.loc[0, "G1"] = 99  # one invalid row
+    res = ingestion.prepare_uploads(
+        [
+            ingestion.UploadItem("a.csv", frame, "mat"),
+            ingestion.UploadItem("b.csv", with_subject, "uploaded"),
+            ingestion.UploadItem("c.csv", bad, "por"),
+        ]
+    )
+    assert res.rows_kept == {"a.csv": 39, "b.csv": 40, "c.csv": 0}
+    assert res.subjects["b.csv"] == "mat, por"
+    assert not res.reports["c.csv"].is_valid
+    assert res.dataset["subject"].value_counts().to_dict() == {"mat": 54, "por": 25}
+    assert len(res.dataset) == 79
+
+
+def test_prepare_uploads_all_rejected(frame):
+    res = ingestion.prepare_uploads(
+        [ingestion.UploadItem("x.csv", frame.drop(columns=["G3"]), "mat")]
+    )
+    assert res.dataset.empty
+
+
+def test_template_csv_has_all_columns():
+    header = ingestion.template_csv().strip().split(";")
+    assert header == list(config.REQUIRED_COLUMNS)
 
 
 def test_load_bundled_and_roundtrip(tmp_path):

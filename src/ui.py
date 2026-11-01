@@ -185,34 +185,35 @@ def friendly_error(message: str, detail: str = "") -> None:
     st.error(message + (f"\n\n{detail}" if detail else ""), icon="⚠️")
 
 
-@st.cache_data(show_spinner="Loading dataset…")
-def load_bundled_dataset() -> tuple[object, dict[str, object]]:
-    """Load the bundled dataset once per session (processed CSV first, else raw files).
+DATASET_KEY = "dataset"
+DATASET_META_KEY = "dataset_meta"
 
-    Returns:
-        ``(dataset, info)`` where ``dataset`` is a DataFrame (empty if unavailable) and
-        ``info`` holds ``status`` (``"ready"``/``"missing"``/``"invalid"``) and ``message``.
-    """
-    import pandas as pd
 
-    from src import ingestion
+def set_active_dataset(dataset: object, meta: dict[str, object]) -> None:
+    """Store the dataset every page reads, plus a description of where it came from."""
+    st.session_state[DATASET_KEY] = dataset
+    st.session_state[DATASET_META_KEY] = meta
 
-    if config.PROCESSED_FILE.exists():
-        try:
-            return ingestion.load_processed(), {"status": "ready", "source": "processed"}
-        except (ValueError, KeyError, OSError):
-            pass  # fall back to rebuilding from raw files
-    try:
-        dataset, reports = ingestion.load_bundled()
-    except FileNotFoundError:
-        return pd.DataFrame(), {
-            "status": "missing",
-            "message": "Bundled data not found. Run `python scripts/fetch_data.py`, "
-            "or upload a file on the Data Ingestion page.",
-        }
-    except ValueError as exc:
-        return pd.DataFrame(), {"status": "invalid", "message": str(exc)}
-    if dataset.empty:
-        return dataset, {"status": "invalid", "message": "Bundled files failed validation."}
-    ingestion.save_processed(dataset)
-    return dataset, {"status": "ready", "source": "raw", "n_reports": len(reports)}
+
+def get_active_dataset() -> tuple[object | None, dict[str, object]]:
+    """Return ``(dataset, meta)`` for this session, or ``(None, {})`` if nothing is loaded."""
+    return st.session_state.get(DATASET_KEY), st.session_state.get(DATASET_META_KEY, {})
+
+
+def require_dataset() -> object:
+    """Return the active dataset, or show an upload prompt and stop the page."""
+    dataset, _ = get_active_dataset()
+    if dataset is None:
+        empty_state("No data loaded yet. Upload your student files on the Data Ingestion page.")
+        st.page_link(
+            "app_pages/1_Data_Ingestion.py",
+            label="Go to Data Ingestion",
+            icon=":material/upload_file:",
+        )
+        st.stop()
+    return dataset
+
+
+def bundled_available() -> bool:
+    """Return True when both bundled UCI files are present in ``data/raw``."""
+    return config.RAW_MAT_FILE.exists() and config.RAW_POR_FILE.exists()

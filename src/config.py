@@ -50,7 +50,11 @@ DATASET_CITATION: Final[str] = (
 )
 CSV_SEPARATOR: Final[str] = ";"
 EXPECTED_ROWS: Final[dict[str, int]] = {"mat": 395, "por": 649}
-SUBJECT_LABELS: Final[dict[str, str]] = {"mat": "Mathematics", "por": "Portuguese"}
+SUBJECT_LABELS: Final[dict[str, str]] = {
+    "mat": "Mathematics",
+    "por": "Portuguese",
+    "uploaded": "Other subject",
+}
 
 # ---------------------------------------------------------------------------
 # Column schema (33 original attributes)

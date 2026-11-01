@@ -20,55 +20,54 @@ def landing() -> None:
         eyebrow="Education analytics",
     )
 
-    dataset, info = ui.load_bundled_dataset()
+    dataset, meta = ui.get_active_dataset()
 
     ui.section("Dataset status")
-    if info["status"] == "ready":
-        counts = dataset[config.SUBJECT_COL].value_counts()
-        st.markdown(ui.badge_html("Bundled dataset loaded", "good"), unsafe_allow_html=True)
+    if dataset is not None:
+        counts = dataset[config.SUBJECT_COL].value_counts().sort_index()
+        source = "Bundled UCI dataset" if meta.get("source") == "bundled" else "Uploaded data"
+        st.markdown(ui.badge_html(f"{source} loaded", "good"), unsafe_allow_html=True)
         ui.kpi_row(
             [ui.Kpi("Records", f"{len(dataset):,}", "Student–subject rows")]
-            + [
-                ui.Kpi(config.SUBJECT_LABELS.get(s, s), f"{n:,}", "rows")
-                for s, n in counts.sort_index().items()
-            ]
-            + [
-                ui.Kpi("Attributes", f"{len(config.SCHEMA)}", "From the UCI codebook"),
-            ]
+            + [ui.Kpi(config.SUBJECT_LABELS.get(s, s), f"{n:,}", "rows") for s, n in counts.items()]
+            + [ui.Kpi("Files", f"{len(meta.get('files', []))}", "Loaded this session")]
         )
     else:
         st.markdown(ui.badge_html("No dataset loaded", "warning"), unsafe_allow_html=True)
-        ui.empty_state(str(info.get("message", "")))
+        ui.empty_state("Upload your student CSV or XLSX files to get started.")
+        st.page_link(
+            "app_pages/1_Data_Ingestion.py", label="Upload data", icon=":material/upload_file:"
+        )
 
     ui.section("How to use this dashboard", "Work through the pages in order, left to right.")
     guide = [
         (
-            "pages/1_Data_Ingestion.py",
+            "app_pages/1_Data_Ingestion.py",
             "Data Ingestion",
             "Use the bundled data or upload CSV/XLSX; review validation and history.",
         ),
         (
-            "pages/2_Executive_Overview.py",
+            "app_pages/2_Executive_Overview.py",
             "Executive Overview",
             "Headline KPIs: grades, pass and fail rates by subject.",
         ),
         (
-            "pages/3_Exploratory_Analysis.py",
+            "app_pages/3_Exploratory_Analysis.py",
             "Exploratory Analysis",
             "Interactive charts of what relates to final grades.",
         ),
         (
-            "pages/4_Model_Evaluation.py",
+            "app_pages/4_Model_Evaluation.py",
             "Model Evaluation",
             "Compare models with and without prior grades against a baseline.",
         ),
         (
-            "pages/5_Early_Warning.py",
+            "app_pages/5_Early_Warning.py",
             "Early Warning",
             "Students at risk, with probability, tier and top reasons.",
         ),
         (
-            "pages/6_Methodology.py",
+            "app_pages/6_Methodology.py",
             "Methodology",
             "Data source, pipeline, metric definitions and limitations.",
         ),
@@ -88,26 +87,30 @@ def landing() -> None:
 NAV_PAGES = {
     "Overview": [
         st.Page(landing, title="Home", icon=":material/home:", default=True),
-        st.Page("pages/1_Data_Ingestion.py", title="Data Ingestion", icon=":material/upload_file:"),
+        st.Page(
+            "app_pages/1_Data_Ingestion.py", title="Data Ingestion", icon=":material/upload_file:"
+        ),
     ],
     "Analytics": [
         st.Page(
-            "pages/2_Executive_Overview.py", title="Executive Overview", icon=":material/dashboard:"
+            "app_pages/2_Executive_Overview.py",
+            title="Executive Overview",
+            icon=":material/dashboard:",
         ),
         st.Page(
-            "pages/3_Exploratory_Analysis.py",
+            "app_pages/3_Exploratory_Analysis.py",
             title="Exploratory Analysis",
             icon=":material/query_stats:",
         ),
     ],
     "Prediction": [
         st.Page(
-            "pages/4_Model_Evaluation.py", title="Model Evaluation", icon=":material/analytics:"
+            "app_pages/4_Model_Evaluation.py", title="Model Evaluation", icon=":material/analytics:"
         ),
-        st.Page("pages/5_Early_Warning.py", title="Early Warning", icon=":material/warning:"),
+        st.Page("app_pages/5_Early_Warning.py", title="Early Warning", icon=":material/warning:"),
     ],
     "Reference": [
-        st.Page("pages/6_Methodology.py", title="Methodology", icon=":material/menu_book:"),
+        st.Page("app_pages/6_Methodology.py", title="Methodology", icon=":material/menu_book:"),
     ],
 }
 

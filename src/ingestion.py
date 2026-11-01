@@ -407,29 +407,6 @@ def prepare(
     return add_derived_columns(merge_subjects(cleaned)), reports
 
 
-def prepare_upload(
-    raw: pd.DataFrame, source: str
-) -> tuple[pd.DataFrame, dict[str, ValidationReport]]:
-    """Prepare an uploaded table, honouring an existing ``subject`` column if present.
-
-    Args:
-        raw: Uploaded table.
-        source: File name, used for the report.
-
-    Returns:
-        ``(dataset, reports)`` as for :func:`prepare`.
-    """
-    report = validate(raw, source=source)
-    if not report.is_valid:
-        return pd.DataFrame(), {source: report}
-    cleaned = clean(raw, report)
-    if config.SUBJECT_COL in cleaned.columns:
-        frames = {str(s): g for s, g in cleaned.groupby(config.SUBJECT_COL, sort=False)}
-    else:
-        frames = {config.DEFAULT_UPLOAD_SUBJECT: cleaned}
-    return add_derived_columns(merge_subjects(frames)), {source: report}
-
-
 def load_bundled(
     raw_dir: Path | None = None,
 ) -> tuple[pd.DataFrame, dict[str, ValidationReport]]:
@@ -559,3 +536,102 @@ def format_quality_summary(
         "=" * 64,
     ]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Multi-file uploads
+# ---------------------------------------------------------------------------
+def infer_subject(filename: str) -> str:
+    """Guess the subject code from a file name (``student-mat.csv`` -> ``"mat"``).
+
+    Returns:
+        ``"mat"``, ``"por"`` or :data:`config.DEFAULT_UPLOAD_SUBJECT` when unknown.
+    """
+    stem = Path(filename).stem.lower()
+    for code, label in config.SUBJECT_LABELS.items():
+        if code == config.DEFAULT_UPLOAD_SUBJECT:
+            continue
+        if code in stem.replace("_", "-").split("-") or label.lower() in stem or stem == code:
+            return code
+    if "math" in stem:
+        return "mat"
+    if "portug" in stem:
+        return "por"
+    return config.DEFAULT_UPLOAD_SUBJECT
+
+
+@dataclass(frozen=True)
+class UploadItem:
+    """One parsed upload awaiting validation.
+
+    Attributes:
+        name: Original file name.
+        table: Raw table as returned by :func:`read_table`.
+        subject: Subject code to assign; ignored if the table has a ``subject`` column.
+    """
+
+    name: str
+    table: pd.DataFrame
+    subject: str
+
+
+@dataclass
+class UploadResult:
+    """Outcome of preparing one or more uploads.
+
+    Attributes:
+        dataset: Merged, cleaned and enriched table (empty if nothing was usable).
+        reports: Validation report per file name.
+        rows_kept: Rows kept per file name after cleaning.
+        subjects: Subject code(s) each file contributed.
+    """
+
+    dataset: pd.DataFrame
+    reports: dict[str, ValidationReport]
+    rows_kept: dict[str, int]
+    subjects: dict[str, str]
+
+
+def prepare_uploads(items: list[UploadItem]) -> UploadResult:
+    """Validate, clean and merge several uploaded files into one dataset.
+
+    Files with a ``subject`` column keep it (split per value); other files take the
+    subject chosen by the user. Rejected files are reported and skipped. Several files
+    for the same subject are stacked.
+
+    Args:
+        items: Parsed uploads.
+
+    Returns:
+        An :class:`UploadResult`; ``dataset`` is empty if every file was rejected.
+    """
+    reports: dict[str, ValidationReport] = {}
+    rows_kept: dict[str, int] = {}
+    subjects: dict[str, str] = {}
+    by_subject: dict[str, list[pd.DataFrame]] = {}
+    for item in items:
+        report = validate(item.table, source=item.name)
+        reports[item.name] = report
+        if not report.is_valid:
+            rows_kept[item.name] = 0
+            subjects[item.name] = "—"
+            continue
+        cleaned = clean(item.table, report)
+        rows_kept[item.name] = len(cleaned)
+        if config.SUBJECT_COL in cleaned.columns:
+            groups = {str(s): g for s, g in cleaned.groupby(config.SUBJECT_COL, sort=False)}
+        else:
+            groups = {item.subject: cleaned}
+        subjects[item.name] = ", ".join(groups)
+        for subject, frame in groups.items():
+            by_subject.setdefault(subject, []).append(frame)
+    if not by_subject:
+        return UploadResult(pd.DataFrame(), reports, rows_kept, subjects)
+    frames = {s: pd.concat(parts, ignore_index=True) for s, parts in by_subject.items()}
+    dataset = add_derived_columns(merge_subjects(frames))
+    return UploadResult(dataset, reports, rows_kept, subjects)
+
+
+def template_csv() -> str:
+    """Return a header-only CSV template (``;``-delimited) with every required column."""
+    return config.CSV_SEPARATOR.join(config.REQUIRED_COLUMNS) + "\n"
