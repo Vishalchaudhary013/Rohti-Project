@@ -1,0 +1,22 @@
+# Runtime and dev dependencies, pinned.
+# Resolved and install-tested on Python 3.10.20 and 3.13.x (Linux x86_64).
+# These are the newest releases that still support Python 3.10.
+
+# Data
+numpy==2.2.6
+pandas==2.3.3
+
+# Visualisation
+plotly==7.1.0
+matplotlib==3.10.9
+
+# Modelling
+scikit-learn==1.7.2
+joblib==1.6.0
+
+# UI
+streamlit==1.65.0
+
+# Dev / quality
+pytest==9.2.0
+ruff==0.17.3
