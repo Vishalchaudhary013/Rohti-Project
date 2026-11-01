@@ -129,6 +129,12 @@ python scripts/export_figures.py
 
 Writes all 12 charts as 300-dpi PNGs to `reports/figures/`.
 
+## Deployment
+
+Step-by-step instructions for Streamlit Community Cloud, including a smoke-test checklist and
+privacy notes, are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). In short: push to GitHub, create
+an app at share.streamlit.io with main file `app.py` and Python 3.12, and make it private.
+
 ## Results
 
 Generate the results table on the real dataset with `python scripts/train.py`. It writes

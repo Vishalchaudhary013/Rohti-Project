@@ -21,6 +21,9 @@ reports/metrics/*
 *.db
 *.sqlite3
 !**/.gitkeep
+# The UCI dataset (CC BY 4.0) may be committed so the deployed app can offer it.
+!data/raw/student-mat.csv
+!data/raw/student-por.csv
 
 # Streamlit secrets
 .streamlit/secrets.toml
