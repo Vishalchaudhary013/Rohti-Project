@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src import config, ui
+from src import analytics, config, ui
 
 
 def landing() -> None:
@@ -24,13 +24,19 @@ def landing() -> None:
 
     ui.section("Dataset status")
     if dataset is not None:
-        counts = dataset[config.SUBJECT_COL].value_counts().sort_index()
         source = "Bundled UCI dataset" if meta.get("source") == "bundled" else "Uploaded data"
         st.markdown(ui.badge_html(f"{source} loaded", "good"), unsafe_allow_html=True)
+        k = analytics.kpis(dataset)
+        subjects = ", ".join(
+            config.SUBJECT_LABELS.get(s, s) for s in sorted(dataset[config.SUBJECT_COL].unique())
+        )
         ui.kpi_row(
-            [ui.Kpi("Records", f"{len(dataset):,}", "Student–subject rows")]
-            + [ui.Kpi(config.SUBJECT_LABELS.get(s, s), f"{n:,}", "rows") for s, n in counts.items()]
-            + [ui.Kpi("Files", f"{len(meta.get('files', []))}", "Loaded this session")]
+            [
+                ui.Kpi("Students (records)", f"{k['n']:,}", subjects),
+                ui.Kpi("Average final grade", f"{k['mean_g3']:.2f} / 20", "Mean of G3"),
+                ui.Kpi("Overall pass rate", f"{k['pass_rate']:.1%}", "G3 ≥ 10"),
+                ui.Kpi("Files", f"{len(meta.get('files', []))}", "Loaded this session"),
+            ]
         )
     else:
         st.markdown(ui.badge_html("No dataset loaded", "warning"), unsafe_allow_html=True)
@@ -84,6 +90,8 @@ def landing() -> None:
     st.caption(f"Data: {config.DATASET_CITATION}")
 
 
+NO_FILTER_PAGES = {"Home", "Data Ingestion", "Methodology"}
+
 NAV_PAGES = {
     "Overview": [
         st.Page(landing, title="Home", icon=":material/home:", default=True),
@@ -116,4 +124,8 @@ NAV_PAGES = {
 
 if __name__ == "__main__":
     ui.setup_page("Home")
-    st.navigation(NAV_PAGES).run()
+    page = st.navigation(NAV_PAGES)
+    active, _ = ui.get_active_dataset()
+    if active is not None and page.title not in NO_FILTER_PAGES:
+        ui.render_filters(active)
+    page.run()

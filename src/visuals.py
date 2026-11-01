@@ -1,1 +1,537 @@
-"""Placeholder for src/visuals.py; implemented in a later milestone."""
+"""Chart builders: pure functions returning Plotly figures, plus Matplotlib PNG exports.
+
+One colour system for every chart (tokens in :mod:`src.config`):
+pass = blue, fail = orange with a diagonal hatch and a text label (never colour alone),
+correlations use a red <-> grey <-> blue diverging scale centred on zero.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+
+from src import analytics, config
+
+PERCENT = ".1%"
+
+
+# ---------------------------------------------------------------------------
+# Labels and theme
+# ---------------------------------------------------------------------------
+def value_label(column: str, value: object) -> str:
+    """Return the display label for a coded value of ``column``."""
+    if column == config.SUBJECT_COL:
+        return config.SUBJECT_LABELS.get(str(value), str(value))
+    return config.VALUE_LABELS.get(column, {}).get(value, str(value))
+
+
+def axis_title(column: str) -> str:
+    """Return the axis title for ``column``."""
+    return config.AXIS_TITLES.get(column, column)
+
+
+def _style(fig: go.Figure, x_title: str = "", y_title: str = "", height: int = 380) -> go.Figure:
+    """Apply the shared flat theme: surfaces, hairline grid, readable fonts."""
+    fig.update_layout(
+        height=height,
+        margin={"l": 64, "r": 24, "t": 24, "b": 56},
+        paper_bgcolor=config.SURFACE,
+        plot_bgcolor=config.SURFACE,
+        font={
+            "family": config.FONT_FAMILY,
+            "size": config.BASE_FONT_SIZE - 1,
+            "color": config.INK_SECONDARY,
+        },
+        hoverlabel={
+            "bgcolor": config.SURFACE,
+            "bordercolor": config.BORDER,
+            "font": {"color": config.INK_PRIMARY, "family": config.FONT_FAMILY},
+        },
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "x": 0,
+            "title": None,
+            "font": {"color": config.INK_PRIMARY},
+        },
+        bargap=0.25,
+    )
+    axis = {
+        "gridcolor": config.GRIDLINE,
+        "linecolor": config.AXIS_LINE,
+        "zeroline": False,
+        "ticks": "",
+        "tickfont": {"color": config.INK_MUTED},
+        "title_font": {"color": config.INK_SECONDARY},
+    }
+    fig.update_xaxes(title_text=x_title, showgrid=False, **axis)
+    fig.update_yaxes(title_text=y_title, **axis)
+    return fig
+
+
+def _tick_with_n(column: str, levels: pd.Series, counts: pd.Series) -> list[str]:
+    """Return tick labels of the form ``"Label<br>n=123"``."""
+    return [
+        f"{value_label(column, v)}<br><span style='font-size:11px'>n={int(n):,}</span>"
+        for v, n in zip(levels, counts, strict=True)
+    ]
+
+
+def _outcome_bar_style(outcome: str) -> dict[str, object]:
+    """Marker settings for a pass/fail bar trace (colour + pattern)."""
+    return {
+        "color": config.OUTCOME_COLORS[outcome],
+        "line": {"color": config.SURFACE, "width": 1},
+        "pattern": {
+            "shape": config.OUTCOME_PATTERNS[outcome],
+            "fgcolor": config.SURFACE,
+            "size": 6,
+            "solidity": 0.25,
+            "fillmode": "overlay",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Plotly figures
+# ---------------------------------------------------------------------------
+def g3_histogram(df: pd.DataFrame) -> go.Figure:
+    """Distribution of final grades, with pass and fail bars distinguished by colour and hatch."""
+    grades = np.arange(config.GRADE_MIN, config.GRADE_MAX + 1)
+    counts = df[config.TARGET_SOURCE].value_counts().reindex(grades, fill_value=0)
+    fig = go.Figure()
+    for outcome, mask in (
+        (config.FAIL_LABEL, grades < config.PASS_THRESHOLD),
+        (config.PASS_LABEL, grades >= config.PASS_THRESHOLD),
+    ):
+        fig.add_bar(
+            x=grades[mask],
+            y=counts.to_numpy()[mask],
+            name=outcome,
+            marker=_outcome_bar_style(outcome),
+            hovertemplate=f"G3 = %{{x}}<br>%{{y}} students<br>{outcome}<extra></extra>",
+        )
+    fig.add_vline(
+        x=config.PASS_THRESHOLD - 0.5,
+        line={"color": config.INK_MUTED, "dash": "dot", "width": 1},
+        annotation_text="Pass mark (10)",
+        annotation_font={"color": config.INK_SECONDARY, "size": 11},
+    )
+    fig.update_layout(bargap=0.08)
+    fig.update_xaxes(dtick=1, range=[-0.6, 20.6])
+    return _style(fig, axis_title("G3"), "Number of students")
+
+
+def pass_rate_bar(rates: pd.DataFrame, by: str, height: int = 340) -> go.Figure:
+    """Pass rate per group (output of :func:`analytics.pass_rate_by`), with group sizes."""
+    fig = go.Figure(
+        go.Bar(
+            x=list(range(len(rates))),
+            y=rates["pass_rate"],
+            marker={"color": config.PASS_COLOR},
+            text=[f"{r:.1%}" if pd.notna(r) else "—" for r in rates["pass_rate"]],
+            textposition="outside",
+            textfont={"color": config.INK_PRIMARY},
+            customdata=np.stack([rates["n"], rates["n_pass"]], axis=1),
+            hovertemplate="Pass rate %{y:.1%}<br>%{customdata[1]} of %{customdata[0]} "
+            "students passed<extra></extra>",
+            cliponaxis=False,
+        )
+    )
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(rates))),
+        ticktext=_tick_with_n(by, rates[by], rates["n"]),
+    )
+    fig.update_yaxes(tickformat=".0%", range=[0, 1.12])
+    return _style(fig, axis_title(by), "Pass rate", height)
+
+
+def mean_bar(means: pd.DataFrame, by: str, height: int = 340) -> go.Figure:
+    """Mean G3 per group (output of :func:`analytics.mean_by`) with ±1 SE bars and sizes."""
+    fig = go.Figure(
+        go.Bar(
+            x=list(range(len(means))),
+            y=means["mean"],
+            marker={"color": config.PASS_COLOR},
+            error_y={
+                "type": "data",
+                "array": means["sem"].fillna(0),
+                "color": config.INK_MUTED,
+                "thickness": 1,
+                "width": 4,
+            },
+            text=[f"{m:.1f}" if pd.notna(m) else "—" for m in means["mean"]],
+            textposition="inside",
+            insidetextanchor="start",
+            textfont={"color": "#ffffff"},
+            customdata=np.stack([means["n"], means["sem"].fillna(0)], axis=1),
+            hovertemplate="Mean G3 %{y:.2f} (±%{customdata[1]:.2f} SE)<br>"
+            "n = %{customdata[0]}<extra></extra>",
+            cliponaxis=False,
+        )
+    )
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(means))),
+        ticktext=_tick_with_n(by, means[by], means["n"]),
+    )
+    fig.update_yaxes(range=[0, config.GRADE_MAX])
+    return _style(fig, axis_title(by), "Mean final grade (G3)", height)
+
+
+def g3_box(df: pd.DataFrame, by: str, height: int = 360) -> go.Figure:
+    """Box plots of G3 per level of ``by`` in fixed categorical colour order."""
+    fig = go.Figure()
+    levels = sorted(df[by].dropna().unique().tolist())
+    for i, level in enumerate(levels):
+        values = df.loc[df[by] == level, config.TARGET_SOURCE]
+        color = config.CATEGORICAL_SEQUENCE[i % len(config.CATEGORICAL_SEQUENCE)]
+        fig.add_box(
+            y=values,
+            name=f"{value_label(by, level)} (n={len(values):,})",
+            marker={"color": color, "size": 5},
+            line={"color": color, "width": 1.5},
+            fillcolor="rgba(0,0,0,0)",
+            boxmean=True,
+            hoverinfo="y",
+        )
+    fig.update_layout(showlegend=False)
+    fig.update_yaxes(range=[-0.5, config.GRADE_MAX + 0.5])
+    return _style(fig, axis_title(by), axis_title("G3"), height)
+
+
+def g2_g3_scatter(df: pd.DataFrame, seed: int = config.RANDOM_STATE) -> go.Figure:
+    """G2 vs G3 scatter. Points are jittered ±0.25 so stacked students stay visible.
+
+    Fail points use an ``x`` symbol as well as colour; hover shows exact grades and how
+    many students share them.
+    """
+    rng = np.random.default_rng(seed)
+    data = df[["G2", "G3", config.PASS_COL]].copy()
+    data["n_same"] = analytics.point_counts(df, "G2", "G3").to_numpy()
+    fig = go.Figure()
+    for outcome, flag, symbol in (
+        (config.PASS_LABEL, 1, "circle"),
+        (config.FAIL_LABEL, 0, "x-thin-open"),
+    ):
+        part = data[data[config.PASS_COL] == flag]
+        fig.add_scatter(
+            x=part["G2"] + rng.uniform(-0.25, 0.25, len(part)),
+            y=part["G3"] + rng.uniform(-0.25, 0.25, len(part)),
+            mode="markers",
+            name=outcome,
+            marker={
+                "color": config.OUTCOME_COLORS[outcome],
+                "symbol": symbol,
+                "size": 8,
+                "opacity": 0.65,
+                "line": {"width": 1.5, "color": config.OUTCOME_COLORS[outcome]}
+                if flag == 0
+                else {"width": 0.5, "color": config.SURFACE},
+            },
+            customdata=part[["G2", "G3", "n_same"]].to_numpy(),
+            hovertemplate="G2 = %{customdata[0]}, G3 = %{customdata[1]}<br>"
+            "%{customdata[2]} student(s) at this point<extra>" + outcome + "</extra>",
+        )
+    fig.add_hline(
+        y=config.PASS_THRESHOLD - 0.5,
+        line={"color": config.INK_MUTED, "dash": "dot", "width": 1},
+        annotation_text="Pass mark",
+        annotation_position="bottom right",
+        annotation_font={"color": config.INK_SECONDARY, "size": 11},
+    )
+    fig.update_xaxes(range=[-0.8, 20.8], dtick=2)
+    fig.update_yaxes(range=[-0.8, 20.8], dtick=2)
+    return _style(fig, axis_title("G2"), axis_title("G3"), 460)
+
+
+def correlation_bar(corr: pd.Series, target: str = config.TARGET_SOURCE) -> go.Figure:
+    """Horizontal bars of each attribute's correlation with ``target`` (sorted)."""
+    neg, pos = config.DIVERGING_SCALE[0][1], config.DIVERGING_SCALE[-1][1]
+    fig = go.Figure(
+        go.Bar(
+            x=corr.to_numpy(),
+            y=corr.index,
+            orientation="h",
+            marker={"color": [pos if v >= 0 else neg for v in corr]},
+            text=[f"{v:+.2f}" for v in corr],
+            textposition="outside",
+            textfont={"color": config.INK_PRIMARY, "size": 11},
+            hovertemplate="%{y}: r = %{x:+.3f}<extra></extra>",
+            cliponaxis=False,
+        )
+    )
+    fig.update_xaxes(
+        range=[-1, 1], dtick=0.25, showgrid=True, zeroline=True, zerolinecolor=config.AXIS_LINE
+    )
+    fig.update_layout(bargap=0.35)
+    return _style(fig, f"Pearson correlation with {target}", "", max(320, 24 * len(corr) + 90))
+
+
+def correlation_heatmap(matrix: pd.DataFrame) -> go.Figure:
+    """Correlation heatmap on a diverging red–grey–blue scale centred on 0."""
+    fig = go.Figure(
+        go.Heatmap(
+            z=matrix.to_numpy(),
+            x=matrix.columns,
+            y=matrix.index,
+            zmin=-1,
+            zmax=1,
+            zmid=0,
+            colorscale=[list(s) for s in config.DIVERGING_SCALE],
+            text=matrix.to_numpy(),
+            texttemplate="%{text:.2f}",
+            textfont={"size": 9},
+            xgap=2,
+            ygap=2,
+            hovertemplate="%{y} × %{x}: r = %{z:+.3f}<extra></extra>",
+            colorbar={"title": {"text": "r"}, "thickness": 10, "outlinewidth": 0},
+        )
+    )
+    fig.update_yaxes(autorange="reversed")
+    fig.update_xaxes(tickangle=-45)
+    side = max(420, 30 * len(matrix) + 140)
+    return _style(fig, "", "", side)
+
+
+# ---------------------------------------------------------------------------
+# Static (Matplotlib) exports — 300 dpi PNGs for reports
+# ---------------------------------------------------------------------------
+FIGURE_CATALOG: dict[str, str] = {
+    "01_g3_distribution.png": "Distribution of final grades (G3), pass vs fail",
+    "02_pass_rate_by_subject.png": "Pass rate by subject, with group sizes",
+    "03_pass_rate_by_school.png": "Pass rate by school, with group sizes",
+    "04_mean_g3_by_studytime.png": "Mean G3 by weekly study time (±1 SE)",
+    "05_mean_g3_by_failures.png": "Mean G3 by number of past failures (±1 SE)",
+    "06_pass_rate_by_absence_band.png": "Pass rate by absence band",
+    "07_g3_box_by_subject.png": "G3 box plots by subject",
+    "08_g3_box_by_higher.png": "G3 box plots by higher-education aspiration",
+    "09_g2_vs_g3_scatter.png": "Second-period vs final grade (jittered)",
+    "10_correlation_with_g3.png": "Correlation of numeric attributes with G3",
+    "11_correlation_heatmap.png": "Correlation heatmap of numeric attributes",
+}
+
+
+def _mpl():
+    """Import Matplotlib with a non-interactive backend and apply the shared style."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update(
+        {
+            "font.size": 10,
+            "axes.edgecolor": config.AXIS_LINE,
+            "axes.labelcolor": config.INK_SECONDARY,
+            "xtick.color": config.INK_MUTED,
+            "ytick.color": config.INK_MUTED,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.grid": True,
+            "axes.grid.axis": "y",
+            "grid.color": config.GRIDLINE,
+            "grid.linewidth": 0.6,
+            "axes.facecolor": config.SURFACE,
+            "figure.facecolor": config.SURFACE,
+            "legend.frameon": False,
+        }
+    )
+    return plt
+
+
+def _static_rate(ax, rates: pd.DataFrame, by: str) -> None:
+    labels = [f"{value_label(by, v)}\nn={n:,}" for v, n in zip(rates[by], rates["n"], strict=True)]
+    bars = ax.bar(labels, rates["pass_rate"].fillna(0), color=config.PASS_COLOR)
+    ax.bar_label(
+        bars,
+        labels=[f"{r:.1%}" if pd.notna(r) else "—" for r in rates["pass_rate"]],
+        padding=3,
+        color=config.INK_PRIMARY,
+    )
+    ax.set_ylim(0, 1.12)
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
+    ax.set_xlabel(axis_title(by))
+    ax.set_ylabel("Pass rate")
+
+
+def _static_mean(ax, means: pd.DataFrame, by: str) -> None:
+    labels = [f"{value_label(by, v)}\nn={n:,}" for v, n in zip(means[by], means["n"], strict=True)]
+    bars = ax.bar(
+        labels,
+        means["mean"].fillna(0),
+        color=config.PASS_COLOR,
+        yerr=means["sem"].fillna(0),
+        ecolor=config.INK_MUTED,
+        capsize=3,
+    )
+    ax.bar_label(
+        bars,
+        labels=[f"{m:.1f}" if pd.notna(m) else "—" for m in means["mean"]],
+        padding=6,
+        color=config.INK_PRIMARY,
+    )
+    ax.set_ylim(0, config.GRADE_MAX)
+    ax.set_xlabel(axis_title(by))
+    ax.set_ylabel("Mean final grade (G3)")
+
+
+def _static_box(ax, df: pd.DataFrame, by: str) -> None:
+    levels = sorted(df[by].dropna().unique().tolist())
+    data = [df.loc[df[by] == lv, config.TARGET_SOURCE] for lv in levels]
+    bp = ax.boxplot(
+        data,
+        tick_labels=[
+            f"{value_label(by, lv)}\nn={len(d):,}" for lv, d in zip(levels, data, strict=True)
+        ],
+        showmeans=True,
+        patch_artist=True,
+    )
+    for i, box in enumerate(bp["boxes"]):
+        color = config.CATEGORICAL_SEQUENCE[i % len(config.CATEGORICAL_SEQUENCE)]
+        box.set(facecolor="none", edgecolor=color, linewidth=1.5)
+    ax.set_xlabel(axis_title(by))
+    ax.set_ylabel(axis_title("G3"))
+
+
+def export_static_figures(
+    df: pd.DataFrame, out_dir: Path | None = None, dpi: int = config.FIGURE_EXPORT_DPI
+) -> list[Path]:
+    """Render every exploratory chart as a PNG (Matplotlib, ``dpi`` resolution).
+
+    Args:
+        df: Dataset to plot (typically already filtered).
+        out_dir: Destination folder; defaults to ``config.FIGURES_DIR``.
+        dpi: Output resolution.
+
+    Returns:
+        Paths of the written files, in :data:`FIGURE_CATALOG` order.
+    """
+    plt = _mpl()
+    out_dir = out_dir or config.FIGURES_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    grades = np.arange(config.GRADE_MIN, config.GRADE_MAX + 1)
+
+    from matplotlib.ticker import MaxNLocator
+
+    def hist(ax):
+        counts = df[config.TARGET_SOURCE].value_counts().reindex(grades, fill_value=0)
+        fail = grades < config.PASS_THRESHOLD
+        ax.bar(
+            grades[fail],
+            counts[fail],
+            color=config.FAIL_COLOR,
+            hatch="//",
+            edgecolor=config.SURFACE,
+            label=config.FAIL_LABEL,
+        )
+        ax.bar(grades[~fail], counts[~fail], color=config.PASS_COLOR, label=config.PASS_LABEL)
+        ax.axvline(config.PASS_THRESHOLD - 0.5, color=config.INK_MUTED, ls=":", lw=1)
+        ax.set_xticks(grades)
+        ax.set_xlabel(axis_title("G3"))
+        ax.set_ylabel("Number of students")
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.legend()
+
+    def scatter(ax):
+        rng = np.random.default_rng(config.RANDOM_STATE)
+        for outcome, flag, marker in ((config.PASS_LABEL, 1, "o"), (config.FAIL_LABEL, 0, "x")):
+            part = df[df[config.PASS_COL] == flag]
+            ax.scatter(
+                part["G2"] + rng.uniform(-0.25, 0.25, len(part)),
+                part["G3"] + rng.uniform(-0.25, 0.25, len(part)),
+                s=14,
+                alpha=0.6,
+                marker=marker,
+                color=config.OUTCOME_COLORS[outcome],
+                label=outcome,
+            )
+        ax.axhline(config.PASS_THRESHOLD - 0.5, color=config.INK_MUTED, ls=":", lw=1)
+        ax.set_xlabel(axis_title("G2"))
+        ax.set_ylabel(axis_title("G3"))
+        ax.legend()
+
+    def corr_bar(ax):
+        corr = analytics.correlations_with(df)
+        neg, pos = config.DIVERGING_SCALE[0][1], config.DIVERGING_SCALE[-1][1]
+        ax.barh(corr.index, corr.to_numpy(), color=[pos if v >= 0 else neg for v in corr])
+        for y, v in enumerate(corr):
+            ax.text(
+                v + (0.02 if v >= 0 else -0.02),
+                y,
+                f"{v:+.2f}",
+                va="center",
+                ha="left" if v >= 0 else "right",
+                fontsize=8,
+                color=config.INK_PRIMARY,
+            )
+        ax.set_xlim(-1, 1)
+        ax.axvline(0, color=config.AXIS_LINE, lw=1)
+        ax.grid(axis="x")
+        ax.grid(axis="y", visible=False)
+        ax.set_xlabel("Pearson correlation with G3")
+
+    def heatmap(ax):
+        from matplotlib.colors import LinearSegmentedColormap
+
+        m = analytics.correlation_matrix(df)
+        cmap = LinearSegmentedColormap.from_list("div", list(config.DIVERGING_SCALE))
+        im = ax.imshow(m.to_numpy(), cmap=cmap, vmin=-1, vmax=1)
+        ax.set_xticks(range(len(m)), m.columns, rotation=90)
+        ax.set_yticks(range(len(m)), m.index)
+        ax.grid(False)
+        for (i, j), v in np.ndenumerate(m.to_numpy()):
+            ax.text(
+                j, i, f"{v:.2f}", ha="center", va="center", fontsize=6, color=config.INK_PRIMARY
+            )
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="r")
+
+    builders: dict[str, tuple[Callable, tuple[float, float]]] = {
+        "01_g3_distribution.png": (hist, (9, 4.5)),
+        "02_pass_rate_by_subject.png": (
+            lambda ax: _static_rate(
+                ax, analytics.pass_rate_by(df, config.SUBJECT_COL), config.SUBJECT_COL
+            ),
+            (6, 4.5),
+        ),
+        "03_pass_rate_by_school.png": (
+            lambda ax: _static_rate(ax, analytics.pass_rate_by(df, "school"), "school"),
+            (6, 4.5),
+        ),
+        "04_mean_g3_by_studytime.png": (
+            lambda ax: _static_mean(ax, analytics.mean_by(df, "studytime"), "studytime"),
+            (7, 4.5),
+        ),
+        "05_mean_g3_by_failures.png": (
+            lambda ax: _static_mean(ax, analytics.mean_by(df, "failures"), "failures"),
+            (7, 4.5),
+        ),
+        "06_pass_rate_by_absence_band.png": (
+            lambda ax: _static_rate(
+                ax, analytics.pass_rate_by(df, config.ABSENCE_BAND_COL), config.ABSENCE_BAND_COL
+            ),
+            (8, 4.5),
+        ),
+        "07_g3_box_by_subject.png": (lambda ax: _static_box(ax, df, config.SUBJECT_COL), (6, 4.5)),
+        "08_g3_box_by_higher.png": (lambda ax: _static_box(ax, df, "higher"), (6, 4.5)),
+        "09_g2_vs_g3_scatter.png": (scatter, (6.5, 6)),
+        "10_correlation_with_g3.png": (corr_bar, (7, 7)),
+        "11_correlation_heatmap.png": (heatmap, (10, 9)),
+    }
+    written: list[Path] = []
+    for name, (draw, size) in builders.items():
+        fig, ax = plt.subplots(figsize=size)
+        draw(ax)
+        ax.set_title(FIGURE_CATALOG[name], loc="left", color=config.INK_PRIMARY, fontsize=11)
+        fig.tight_layout()
+        path = out_dir / name
+        fig.savefig(path, dpi=dpi)
+        plt.close(fig)
+        written.append(path)
+    return written

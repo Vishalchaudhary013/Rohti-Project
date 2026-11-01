@@ -167,6 +167,27 @@ DOWNLOAD_TIMEOUT_S: Final[int] = 30
 PASS_LABEL: Final[str] = "Pass"
 FAIL_LABEL: Final[str] = "Fail"
 
+# Human-readable labels for coded values (display only).
+VALUE_LABELS: Final[dict[str, dict[object, str]]] = {
+    "school": {"GP": "Gabriel Pereira", "MS": "Mousinho da Silveira"},
+    "sex": {"F": "Female", "M": "Male"},
+    "address": {"U": "Urban", "R": "Rural"},
+    "higher": {"yes": "Wants higher education", "no": "Does not"},
+    "studytime": {1: "<2 h", 2: "2–5 h", 3: "5–10 h", 4: ">10 h"},
+    "failures": {3: "3+"},  # UCI codes 3+ failures as 3; others shown as-is
+}
+AXIS_TITLES: Final[dict[str, str]] = {
+    "G1": "First-period grade (G1, 0–20)",
+    "G2": "Second-period grade (G2, 0–20)",
+    "G3": "Final grade (G3, 0–20)",
+    "studytime": "Weekly study time",
+    "failures": "Past class failures",
+    "absence_band": "Number of absences",
+    "subject": "Subject",
+    "school": "School",
+    "higher": "Higher-education aspiration",
+}
+
 # ---------------------------------------------------------------------------
 # Modelling
 # ---------------------------------------------------------------------------

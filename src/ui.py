@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+import pandas as pd
 import streamlit as st
 
 from src import config
@@ -87,6 +88,11 @@ h1, h2, h3 {{ color: var(--ea-ink); letter-spacing: -0.01em; }}
 .ea-nav-body {{ color: var(--ea-ink-2); font-size: 0.85rem; margin: 0; min-height: 3.2em; }}
 .ea-step {{ color: var(--ea-muted); font-size: 0.75rem; font-weight: 600; margin: 0 0 0.4rem;
   font-variant-numeric: tabular-nums; }}
+.ea-chart-title {{ font-weight: 600; color: var(--ea-ink); font-size: 0.95rem;
+  margin: 0.5rem 0 0 !important; }}
+p.ea-chart-cap {{ color: var(--ea-muted); font-size: 0.8rem !important; margin: 0.1rem 0 0; }}
+[data-testid="stPlotlyChart"] {{ border: 1px solid var(--ea-border);
+  border-radius: var(--ea-radius); background: var(--ea-surface); padding: 4px; }}
 .ea-empty code {{ color: var(--ea-ink) !important; font-size: 0.85em; background: var(--ea-page);
   border: 1px solid var(--ea-border); border-radius: var(--ea-radius); padding: 1px 4px; }}
 .ea-empty {{ border: 1px dashed var(--ea-border); border-radius: var(--ea-radius);
@@ -187,12 +193,15 @@ def friendly_error(message: str, detail: str = "") -> None:
 
 DATASET_KEY = "dataset"
 DATASET_META_KEY = "dataset_meta"
+DATASET_VERSION_KEY = "dataset_version"
+FILTER_KEY = "filters"
 
 
 def set_active_dataset(dataset: object, meta: dict[str, object]) -> None:
     """Store the dataset every page reads, plus a description of where it came from."""
     st.session_state[DATASET_KEY] = dataset
     st.session_state[DATASET_META_KEY] = meta
+    st.session_state[DATASET_VERSION_KEY] = st.session_state.get(DATASET_VERSION_KEY, 0) + 1
 
 
 def get_active_dataset() -> tuple[object | None, dict[str, object]]:
@@ -217,3 +226,86 @@ def require_dataset() -> object:
 def bundled_available() -> bool:
     """Return True when both bundled UCI files are present in ``data/raw``."""
     return config.RAW_MAT_FILE.exists() and config.RAW_POR_FILE.exists()
+
+
+def render_filters(df: pd.DataFrame) -> None:
+    """Render the global sidebar filters and store the selection in session state.
+
+    Widget keys include the dataset version so loading new data resets the filters.
+    Call from the app entry point so selections persist across pages.
+    """
+    from src import analytics
+
+    v = st.session_state.get(DATASET_VERSION_KEY, 0)
+    opts = analytics.filter_options(df)
+    sb = st.sidebar
+    sb.markdown('<p class="ea-eyebrow">Filters</p>', unsafe_allow_html=True)
+
+    def multi(label: str, name: str, column: str) -> tuple[str, ...]:
+        choices = opts[name]
+        picked = sb.multiselect(
+            label,
+            choices,
+            default=choices,
+            format_func=lambda c: _value_label(column, c),
+            key=f"f_{name}_{v}",
+        )
+        return () if set(picked) == set(choices) else tuple(picked) or ("__none__",)
+
+    subjects = multi("Subject", "subjects", config.SUBJECT_COL)
+    schools = multi("School", "schools", "school")
+    sexes = multi("Sex", "sexes", "sex")
+    addresses = multi("Address", "addresses", "address")
+    lo, hi = opts["age_range"]
+    age = sb.slider("Age range", lo, hi, (lo, hi), key=f"f_age_{v}") if hi > lo else (lo, hi)
+    exclude = sb.toggle("Exclude G3 = 0 (likely absent from final exam)", key=f"f_g3zero_{v}")
+    st.session_state[FILTER_KEY] = analytics.FilterSpec(
+        subjects=subjects,
+        schools=schools,
+        sexes=sexes,
+        addresses=addresses,
+        age_range=None if tuple(age) == (lo, hi) else (int(age[0]), int(age[1])),
+        exclude_g3_zero=exclude,
+    )
+
+
+def _value_label(column: str, value: object) -> str:
+    """Display label for a coded value (thin wrapper to avoid importing visuals here)."""
+    if column == config.SUBJECT_COL:
+        return config.SUBJECT_LABELS.get(str(value), str(value))
+    return config.VALUE_LABELS.get(column, {}).get(value, str(value))
+
+
+def filtered_dataset() -> pd.DataFrame:
+    """Return the active dataset with the global filters applied (stops if none loaded)."""
+    from src import analytics
+
+    df = require_dataset()
+    spec = st.session_state.get(FILTER_KEY) or analytics.FilterSpec()
+    out = analytics.apply_filters(df, spec)
+    active = spec != analytics.FilterSpec()
+    if active:
+        st.caption(f"Filters active: showing {len(out):,} of {len(df):,} rows.")
+    if out.empty:
+        empty_state("No rows match the current filters. Widen them in the sidebar.")
+        st.stop()
+    return out
+
+
+def chart(fig: object, data: pd.DataFrame | None = None, key: str | None = None) -> None:
+    """Render a Plotly figure full-width, with an optional 'Show data' table view."""
+    st.plotly_chart(
+        fig,
+        width="stretch",
+        key=key,
+        config={"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]},
+    )
+    if data is not None:
+        with st.expander("Show data"):
+            st.dataframe(data, hide_index=True, width="stretch")
+
+
+def chart_title(title: str, caption: str = "") -> None:
+    """Small heading placed directly above a chart."""
+    cap = f'<p class="ea-chart-cap">{html.escape(caption)}</p>' if caption else ""
+    st.markdown(f'<p class="ea-chart-title">{html.escape(title)}</p>{cap}', unsafe_allow_html=True)
