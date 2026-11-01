@@ -5,6 +5,7 @@
 # Data
 numpy==2.2.6
 pandas==2.3.3
+openpyxl==3.1.5                  # .xlsx upload support for pandas.read_excel
 
 # Visualisation
 plotly==7.1.0
@@ -19,4 +20,5 @@ streamlit==1.65.0
 
 # Dev / quality
 pytest==9.2.0
+pytest-cov==7.1.0                # coverage reporting for src/
 ruff==0.17.3
