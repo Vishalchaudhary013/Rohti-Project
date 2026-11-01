@@ -93,6 +93,10 @@ h1, h2, h3 {{ color: var(--ea-ink); letter-spacing: -0.01em; }}
 p.ea-chart-cap {{ color: var(--ea-muted); font-size: 0.8rem !important; margin: 0.1rem 0 0; }}
 [data-testid="stPlotlyChart"] {{ border: 1px solid var(--ea-border);
   border-radius: var(--ea-radius); background: var(--ea-surface); padding: 4px; }}
+[data-testid="stMarkdownContainer"] code {{ color: var(--ea-ink) !important;
+  background: var(--ea-page); border: 1px solid var(--ea-border);
+  border-radius: var(--ea-radius); }}
+[data-testid="stTable"] table {{ border-radius: var(--ea-radius); }}
 .ea-empty code {{ color: var(--ea-ink) !important; font-size: 0.85em; background: var(--ea-page);
   border: 1px solid var(--ea-border); border-radius: var(--ea-radius); padding: 1px 4px; }}
 .ea-empty {{ border: 1px dashed var(--ea-border); border-radius: var(--ea-radius);

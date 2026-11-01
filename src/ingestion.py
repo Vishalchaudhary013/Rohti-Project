@@ -641,3 +641,19 @@ def prepare_uploads(items: list[UploadItem]) -> UploadResult:
 def template_csv() -> str:
     """Return a header-only CSV template (``;``-delimited) with every required column."""
     return config.CSV_SEPARATOR.join(config.REQUIRED_COLUMNS) + "\n"
+
+
+def load_files(paths: list[Path] | None = None) -> UploadResult:
+    """Read, validate and merge files from disk (defaults to the bundled UCI raw files).
+
+    Raises:
+        FileNotFoundError: If any path does not exist.
+    """
+    paths = paths or [config.RAW_MAT_FILE, config.RAW_POR_FILE]
+    missing = [str(p) for p in paths if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Missing input file(s): {missing}. Pass --input, or run scripts/fetch_data.py."
+        )
+    items = [UploadItem(p.name, read_table(p), infer_subject(p.name)) for p in paths]
+    return prepare_uploads(items)

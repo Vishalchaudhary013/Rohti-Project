@@ -24,21 +24,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src import config, ingestion, modeling  # noqa: E402
 
 
-def load(inputs: list[Path] | None) -> ingestion.UploadResult:
-    """Load the bundled raw files, or the given input files, into a prepared dataset."""
-    paths = inputs or [config.RAW_MAT_FILE, config.RAW_POR_FILE]
-    missing = [str(p) for p in paths if not p.exists()]
-    if missing:
-        raise FileNotFoundError(
-            f"Missing input file(s): {missing}. Pass --input, or run scripts/fetch_data.py."
-        )
-    items = [
-        ingestion.UploadItem(p.name, ingestion.read_table(p), ingestion.infer_subject(p.name))
-        for p in paths
-    ]
-    return ingestion.prepare_uploads(items)
-
-
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -52,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        loaded = load(args.input)
+        loaded = ingestion.load_files(args.input)
     except (FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
