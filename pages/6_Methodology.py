@@ -1,6 +1,7 @@
-"""Methodology page (placeholder; implemented in milestone M6)."""
+"""Methodology page (implemented in milestone M6)."""
 
-import streamlit as st
+from src import ui
 
-st.title("Methodology")
-st.info("This page is implemented in milestone M6.")
+ui.setup_page("Methodology")
+ui.page_header("Methodology", "Data source, pipeline, metric definitions and limitations.")
+ui.empty_state("This page is built in milestone M6.")

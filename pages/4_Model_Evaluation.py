@@ -1,6 +1,7 @@
-"""Model Evaluation page (placeholder; implemented in milestone M4)."""
+"""Model Evaluation page (implemented in milestone M4)."""
 
-import streamlit as st
+from src import ui
 
-st.title("Model Evaluation")
-st.info("This page is implemented in milestone M4.")
+ui.setup_page("Model Evaluation")
+ui.page_header("Model Evaluation", "Cross-validated model comparison for settings A and B.")
+ui.empty_state("This page is built in milestone M4.")

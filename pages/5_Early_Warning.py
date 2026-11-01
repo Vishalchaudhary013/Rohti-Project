@@ -1,6 +1,7 @@
-"""Early Warning page (placeholder; implemented in milestone M5)."""
+"""Early Warning page (implemented in milestone M5)."""
 
-import streamlit as st
+from src import ui
 
-st.title("Early Warning")
-st.info("This page is implemented in milestone M5.")
+ui.setup_page("Early Warning")
+ui.page_header("Early Warning", "Students predicted to fail, with risk tier and reasons.")
+ui.empty_state("This page is built in milestone M5.")

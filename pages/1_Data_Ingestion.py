@@ -1,6 +1,9 @@
-"""Data Ingestion page (placeholder; implemented in milestone M5)."""
+"""Data Ingestion page (implemented in milestone M5)."""
 
-import streamlit as st
+from src import ui
 
-st.title("Data Ingestion")
-st.info("This page is implemented in milestone M5.")
+ui.setup_page("Data Ingestion")
+ui.page_header(
+    "Data Ingestion", "Upload or select data, review validation results and upload history."
+)
+ui.empty_state("This page is built in milestone M5.")

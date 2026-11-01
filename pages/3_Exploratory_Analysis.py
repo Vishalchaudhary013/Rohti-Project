@@ -1,6 +1,7 @@
-"""Exploratory Analysis page (placeholder; implemented in milestone M3)."""
+"""Exploratory Analysis page (implemented in milestone M3)."""
 
-import streamlit as st
+from src import ui
 
-st.title("Exploratory Analysis")
-st.info("This page is implemented in milestone M3.")
+ui.setup_page("Exploratory Analysis")
+ui.page_header("Exploratory Analysis", "Interactive charts of the drivers of final grades.")
+ui.empty_state("This page is built in milestone M3.")

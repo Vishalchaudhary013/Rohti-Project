@@ -195,39 +195,73 @@ RISK_MEDIUM: Final[float] = 0.4
 TOP_N_REASONS: Final[int] = 3
 
 # ---------------------------------------------------------------------------
-# Colour theme — Okabe-Ito colour-blind-safe palette
+# Design tokens — one validated, colour-blind-safe system for UI chrome and charts.
+# Categorical order is fixed (never cycled); the first three slots pass every
+# CVD / normal-vision check pairwise. Flat UI: no shadows, 2px ("rounded-sm") radius.
 # ---------------------------------------------------------------------------
-OKABE_ITO: Final[dict[str, str]] = {
-    "black": "#000000",
-    "orange": "#E69F00",
-    "sky_blue": "#56B4E9",
-    "green": "#009E73",
-    "yellow": "#F0E442",
-    "blue": "#0072B2",
-    "vermillion": "#D55E00",
-    "purple": "#CC79A7",
-}
-PASS_COLOR: Final[str] = OKABE_ITO["blue"]
-FAIL_COLOR: Final[str] = OKABE_ITO["vermillion"]
-OUTCOME_COLORS: Final[dict[str, str]] = {PASS_LABEL: PASS_COLOR, FAIL_LABEL: FAIL_COLOR}
-# Pass/fail must never rely on colour alone: pair colour with a pattern + text label.
-OUTCOME_PATTERNS: Final[dict[str, str]] = {PASS_LABEL: "", FAIL_LABEL: "/"}
+# Surfaces & ink
+SURFACE: Final[str] = "#fcfcfb"  # cards, charts
+PAGE_BG: Final[str] = "#f9f9f7"  # page plane
+SIDEBAR_BG: Final[str] = "#f0efec"
+INK_PRIMARY: Final[str] = "#0b0b0b"
+INK_SECONDARY: Final[str] = "#52514e"
+INK_MUTED: Final[str] = "#898781"  # axis labels, captions
+GRIDLINE: Final[str] = "#e1e0d9"
+AXIS_LINE: Final[str] = "#c3c2b7"
+BORDER: Final[str] = "#e1e0d9"  # hairline borders replace shadows
+ACCENT: Final[str] = "#2a78d6"  # primary actions / links
+RADIUS_PX: Final[int] = 2  # rounded-sm
+
+# Categorical palette (fixed order)
 CATEGORICAL_SEQUENCE: Final[tuple[str, ...]] = (
-    OKABE_ITO["blue"],
-    OKABE_ITO["orange"],
-    OKABE_ITO["green"],
-    OKABE_ITO["purple"],
-    OKABE_ITO["sky_blue"],
-    OKABE_ITO["vermillion"],
-    OKABE_ITO["yellow"],
+    "#2a78d6",  # 1 blue
+    "#eb6834",  # 2 orange
+    "#1baf7a",  # 3 aqua
+    "#eda100",  # 4 yellow
+    "#e87ba4",  # 5 magenta
+    "#008300",  # 6 green
+    "#6250d6",  # 7 violet
+    "#e34948",  # 8 red
 )
-DIVERGING_SCALE: Final[str] = "RdBu"  # colour-blind-safe diverging scale for heatmaps
-RISK_COLORS: Final[dict[str, str]] = {
-    "High": OKABE_ITO["vermillion"],
-    "Medium": OKABE_ITO["orange"],
-    "Low": OKABE_ITO["sky_blue"],
+PASS_COLOR: Final[str] = CATEGORICAL_SEQUENCE[0]
+FAIL_COLOR: Final[str] = CATEGORICAL_SEQUENCE[1]
+OUTCOME_COLORS: Final[dict[str, str]] = {PASS_LABEL: PASS_COLOR, FAIL_LABEL: FAIL_COLOR}
+# Pass/fail never rely on colour alone: pair colour with a pattern and a text label.
+OUTCOME_PATTERNS: Final[dict[str, str]] = {PASS_LABEL: "", FAIL_LABEL: "/"}
+SUBJECT_COLORS: Final[dict[str, str]] = {
+    "mat": CATEGORICAL_SEQUENCE[0],
+    "por": CATEGORICAL_SEQUENCE[2],
 }
-FONT_FAMILY: Final[str] = "Inter, Segoe UI, Helvetica, Arial, sans-serif"
+
+# Sequential (magnitude) — single blue ramp, light -> dark
+SEQUENTIAL_BLUE: Final[tuple[str, ...]] = (
+    "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#2a78d6", "#256abf", "#1c5cab",
+    "#184f95", "#104281", "#0d366b",
+)  # fmt: skip
+# Diverging (correlations) — blue <-> red with a neutral grey midpoint
+DIVERGING_SCALE: Final[tuple[tuple[float, str], ...]] = (
+    (0.0, "#e34948"),
+    (0.25, "#f0a3a2"),
+    (0.5, "#f0efec"),
+    (0.75, "#86b6ef"),
+    (1.0, "#1c5cab"),
+)
+
+# Status palette (reserved; always shipped with an icon + label)
+STATUS_COLORS: Final[dict[str, str]] = {
+    "good": "#0ca30c",
+    "warning": "#fab219",
+    "serious": "#ec835a",
+    "critical": "#d03b3b",
+}
+RISK_COLORS: Final[dict[str, str]] = {
+    "High": STATUS_COLORS["critical"],
+    "Medium": STATUS_COLORS["serious"],
+    "Low": STATUS_COLORS["warning"],
+}
+RISK_ICONS: Final[dict[str, str]] = {"High": "▲", "Medium": "◆", "Low": "●"}
+
+FONT_FAMILY: Final[str] = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 BASE_FONT_SIZE: Final[int] = 14
 FIGURE_EXPORT_DPI: Final[int] = 300
 

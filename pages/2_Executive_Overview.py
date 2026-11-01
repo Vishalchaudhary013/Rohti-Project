@@ -1,6 +1,7 @@
-"""Executive Overview page (placeholder; implemented in milestone M3)."""
+"""Executive Overview page (implemented in milestone M3)."""
 
-import streamlit as st
+from src import ui
 
-st.title("Executive Overview")
-st.info("This page is implemented in milestone M3.")
+ui.setup_page("Executive Overview")
+ui.page_header("Executive Overview", "Headline KPIs with global filters.")
+ui.empty_state("This page is built in milestone M3.")

@@ -1,14 +1,25 @@
+# Flat, hairline-bordered theme built from the tokens in src/config.py.
 [theme]
 base = "light"
-primaryColor = "#0072B2"          # Okabe-Ito blue
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F2F4F7"
-textColor = "#1F2933"
-font = "sans serif"
+primaryColor = "#2a78d6"
+backgroundColor = "#f9f9f7"
+secondaryBackgroundColor = "#f0efec"
+textColor = "#0b0b0b"
+linkColor = "#2a78d6"
+borderColor = "#e1e0d9"
+showWidgetBorder = true
+baseRadius = "2px"
+font = "sans-serif"
+baseFontSize = 14
+
+[theme.sidebar]
+backgroundColor = "#f0efec"
+secondaryBackgroundColor = "#fcfcfb"
+borderColor = "#e1e0d9"
 
 [server]
 headless = true
-maxUploadSize = 50                # MB
+maxUploadSize = 50
 
 [browser]
 gatherUsageStats = false

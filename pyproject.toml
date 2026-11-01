@@ -19,3 +19,7 @@ addopts = "-q --cov=src --cov-report=term-missing"
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.coverage.run]
+# Streamlit presentation helpers are verified by rendering, not unit tests.
+omit = ["src/ui.py"]
