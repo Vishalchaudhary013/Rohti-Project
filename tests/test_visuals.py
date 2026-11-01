@@ -95,3 +95,14 @@ def test_model_figures():
     signed = visuals.importance_bar(s, "coef", signed=True)
     assert signed.data[0].text[-1] == "+0.50"
     assert visuals.importance_bar(s.abs(), "imp").data[0].marker.color == config.PASS_COLOR
+
+
+def test_risk_figures():
+    import numpy as np
+
+    fig = visuals.risk_donut({"High": 3, "Medium": 5, "Low": 12})
+    pie = fig.data[0]
+    assert list(pie.values) == [3, 5, 12]
+    assert pie.labels[0].endswith("High") and pie.marker.pattern.shape[0] == "x"
+    hist = visuals.risk_histogram(np.array([0.1, 0.45, 0.8, 0.95]), 0.5)
+    assert sum(sum(t.y) for t in hist.data) == 4

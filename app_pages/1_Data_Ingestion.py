@@ -175,6 +175,44 @@ if result is not None:
                 st.dataframe(issues, hide_index=True, width="stretch")
 
 if dataset is not None:
+    ui.section("Data-quality flags", "Computed from the loaded data; nothing is removed here.")
+    dq = ingestion.data_quality_summary(dataset)
+    n = max(int(dq["total_rows"]), 1)
+    g3_zero = int(dq["g3_zero_total"])
+    both = int(dq["rows_in_both_subjects"])
+    dup = int(dataset.drop(columns=[config.RECORD_ID_COL]).duplicated().sum())
+    flags = [
+        (
+            "warning" if g3_zero else "good",
+            f"{g3_zero:,} row(s) ({g3_zero / n:.1%}) have a final grade of 0 — most likely the "
+            "student did not sit the final exam. Use the sidebar toggle to exclude them.",
+        ),
+        (
+            "warning" if both else "good",
+            (
+                f"{both:,} row(s) match a student in the other subject file on the 13 "
+                "attributes the original authors used, so the same student may appear twice "
+                f"({int(dq['matched_student_keys']):,} distinct matches). Treat records as "
+                "student–subject pairs, not unique students."
+            )
+            if both
+            else "No student appears in more than one subject file.",
+        ),
+        (
+            "warning" if dup else "good",
+            f"{dup:,} exact duplicate row(s).",
+        ),
+        (
+            "good" if not int(dq["missing_cells"]) else "warning",
+            f"{int(dq['missing_cells']):,} missing value(s) after cleaning.",
+        ),
+    ]
+    for kind, text in flags:
+        st.markdown(
+            ui.badge_html("Check" if kind == "warning" else "OK", kind) + f"&nbsp; {text}",
+            unsafe_allow_html=True,
+        )
+
     ui.section(
         "Data preview",
         f"Active dataset ({meta.get('source', 'upload')}): {len(dataset):,} rows. "

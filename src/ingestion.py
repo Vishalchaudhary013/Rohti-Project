@@ -375,6 +375,12 @@ def add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
         A copy of ``df`` with the derived columns appended.
     """
     out = df.copy()
+    position = out.groupby(config.SUBJECT_COL, sort=False).cumcount() + 1
+    out.insert(
+        0,
+        config.RECORD_ID_COL,
+        out[config.SUBJECT_COL].astype(str) + "-" + position.map("{:04d}".format),
+    )
     out[config.PASS_COL] = (out[config.TARGET_SOURCE] >= config.PASS_THRESHOLD).astype("int64")
     out[config.ABSENCE_BAND_COL] = absence_band(out["absences"])
     out[config.G3_ZERO_FLAG_COL] = out[config.TARGET_SOURCE] == 0

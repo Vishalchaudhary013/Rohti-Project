@@ -577,6 +577,7 @@ def donut(
 
     Slices carry text labels, and optional hatch patterns, so meaning never relies on colour.
     """
+    total = sum(values) or 1
     fig = go.Figure(
         go.Pie(
             labels=labels,
@@ -595,7 +596,11 @@ def donut(
                     "fillmode": "overlay",
                 },
             },
-            texttemplate="%{label}<br>%{percent:.1%}",
+            text=[
+                f"{lab}<br>{v / total:.1%}" if v else ""
+                for lab, v in zip(labels, values, strict=True)
+            ],
+            texttemplate="%{text}",
             textposition="outside",
             textfont={"color": config.INK_PRIMARY, "size": 12},
             hovertemplate="%{label}: %{value:,} (%{percent:.1%})<extra></extra>",
@@ -784,3 +789,61 @@ def importance_bar(values: pd.Series, title: str, top: int = 15, signed: bool = 
         fig.update_xaxes(range=[-lim, lim], zeroline=True, zerolinecolor=config.AXIS_LINE)
     fig.update_xaxes(showgrid=True)
     return _style(fig, title, "", max(320, 24 * len(data) + 90))
+
+
+# ---------------------------------------------------------------------------
+# Early-warning figures
+# ---------------------------------------------------------------------------
+RISK_PATTERNS: dict[str, str] = {"High": "x", "Medium": "/", "Low": ""}
+
+
+def risk_donut(counts: dict[str, int]) -> go.Figure:
+    """Students per risk tier as a donut; each slice has icon, label, share and pattern."""
+    tiers = [t for t in ("High", "Medium", "Low")]
+    return donut(
+        [f"{config.RISK_ICONS[t]} {t}" for t in tiers],
+        [counts.get(t, 0) for t in tiers],
+        [config.RISK_COLORS[t] for t in tiers],
+        "students scored",
+        f"{sum(counts.values()):,}",
+        patterns=[RISK_PATTERNS[t] for t in tiers],
+    )
+
+
+def risk_histogram(p_fail: np.ndarray | pd.Series, threshold: float) -> go.Figure:
+    """Distribution of predicted P(fail) with the tier cut-offs and the flag threshold."""
+    values = np.asarray(p_fail, dtype=float)
+    edges = np.linspace(0, 1, 21)
+    counts, _ = np.histogram(values, bins=edges)
+    centers = (edges[:-1] + edges[1:]) / 2
+    fig = go.Figure()
+    for tier, lo, hi in (
+        ("Low", 0, config.RISK_MEDIUM),
+        ("Medium", config.RISK_MEDIUM, config.RISK_HIGH),
+        ("High", config.RISK_HIGH, 1.01),
+    ):
+        mask = (centers >= lo) & (centers < hi)
+        fig.add_bar(
+            x=centers[mask],
+            y=counts[mask],
+            width=0.048,
+            name=f"{config.RISK_ICONS[tier]} {tier}",
+            marker={
+                "color": config.RISK_COLORS[tier],
+                "pattern": {
+                    "shape": RISK_PATTERNS[tier],
+                    "fgcolor": config.SURFACE,
+                    "solidity": 0.25,
+                    "fillmode": "overlay",
+                },
+            },
+            hovertemplate="P(fail) %{x:.2f} ± 0.025<br>%{y} students<extra>" + tier + "</extra>",
+        )
+    fig.add_vline(
+        x=threshold,
+        line={"color": config.INK_PRIMARY, "width": 1, "dash": "dot"},
+        annotation_text=f"Flag threshold {threshold:.2f}",
+        annotation_font={"color": config.INK_SECONDARY, "size": 11},
+    )
+    fig.update_xaxes(range=[0, 1], dtick=0.1, tickformat=".1f")
+    return _style(fig, "Predicted probability of failing", "Number of students", 320)

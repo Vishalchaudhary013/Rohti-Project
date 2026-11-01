@@ -152,9 +152,11 @@ PASS_THRESHOLD: Final[int] = 10  # pass = 1 if G3 >= 10
 ABSENCE_BAND_EDGES: Final[tuple[float, ...]] = (-0.5, 0.5, 5.5, 10.5, 20.5, float("inf"))
 ABSENCE_BAND_LABELS: Final[tuple[str, ...]] = ("0", "1–5", "6–10", "11–20", "20+")
 
+RECORD_ID_COL: Final[str] = "record_id"  # e.g. "mat-0001"; row order within subject
 G3_ZERO_FLAG_COL: Final[str] = "flag_g3_zero"  # likely non-appearance at final exam
 BOTH_SUBJECTS_FLAG_COL: Final[str] = "flag_in_both_subjects"  # matched across both files
 DERIVED_COLUMNS: Final[tuple[str, ...]] = (
+    RECORD_ID_COL,
     SUBJECT_COL,
     PASS_COL,
     ABSENCE_BAND_COL,
@@ -207,6 +209,7 @@ FEATURE_SETTINGS: Final[dict[str, str]] = {
 SETTING_B_EXCLUDED: Final[tuple[str, ...]] = ("G1", "G2")
 # Never used as model inputs: the target, its source and derived labels.
 NON_FEATURE_COLUMNS: Final[tuple[str, ...]] = (
+    RECORD_ID_COL,
     "G3",
     PASS_COL,
     ABSENCE_BAND_COL,

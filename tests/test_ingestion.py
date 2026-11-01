@@ -232,3 +232,17 @@ def test_quality_summary_values_are_computed(frame):
     text = ingestion.format_quality_summary(s, reports)
     assert "DATA-QUALITY SUMMARY" in text
     assert "Mathematics" in text
+
+
+def test_record_ids_unique_per_subject():
+    df, _ = ingestion.prepare({"mat": make_frame(5, 1), "por": make_frame(3, 2)})
+    assert list(df[config.RECORD_ID_COL]) == [
+        "mat-0001",
+        "mat-0002",
+        "mat-0003",
+        "mat-0004",
+        "mat-0005",
+        "por-0001",
+        "por-0002",
+        "por-0003",
+    ]
