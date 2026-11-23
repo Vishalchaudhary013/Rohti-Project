@@ -102,6 +102,12 @@ appears instead.
 
 ### Getting the dataset
 
+**No data yet?** `data/sample/` contains a **synthetic** (computer-generated) dataset in the
+same format: upload `synthetic-student-mat.csv` and `synthetic-student-por.csv` to try every
+page. It is not real data; see `data/sample/README.md`. Regenerate it with
+`python scripts/make_sample_data.py`.
+
+
 Download from the [UCI repository](https://archive.ics.uci.edu/dataset/320/student+performance),
 unzip `student+performance.zip`, then `student.zip`, and place `student-mat.csv` and
 `student-por.csv` in `data/raw/`. Or let the script do it:
