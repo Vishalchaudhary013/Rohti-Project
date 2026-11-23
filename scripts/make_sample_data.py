@@ -10,7 +10,8 @@ non-appearances), so every chart and model in the dashboard has something to sho
 Usage::
 
     python scripts/make_sample_data.py                   # writes data/sample/
-    python scripts/make_sample_data.py --seed 7 --out some/folder
+    python scripts/make_sample_data.py --seed 7 --prefix random --out some/folder
+    python scripts/make_sample_data.py --seed 99 --mat-rows 200 --por-rows 300
 """
 
 from __future__ import annotations
@@ -136,14 +137,29 @@ def add_subject_fields(
     return df[list(config.REQUIRED_COLUMNS)]
 
 
-def generate(seed: int = config.RANDOM_STATE) -> dict[str, pd.DataFrame]:
-    """Return ``{"mat": DataFrame, "por": DataFrame}`` in the UCI column order."""
+def generate(
+    seed: int = config.RANDOM_STATE,
+    n_mat: int = N_MAT,
+    n_por: int = N_POR,
+    n_shared: int | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Return ``{"mat": DataFrame, "por": DataFrame}`` in the UCI column order.
+
+    Args:
+        seed: Random seed; the same seed always gives the same files.
+        n_mat: Mathematics rows.
+        n_por: Portuguese rows.
+        n_shared: Students in both subjects (default: same share as the UCI-sized sample).
+    """
+    if n_shared is None:
+        n_shared = round(N_SHARED * min(n_mat, n_por) / min(N_MAT, N_POR))
+    n_shared = max(0, min(n_shared, n_mat, n_por))
     rng = np.random.default_rng(seed)
-    students = make_students(rng, N_POR + N_MAT - N_SHARED)
-    por_students = students.iloc[:N_POR].reset_index(drop=True)
+    students = make_students(rng, n_por + n_mat - n_shared)
+    por_students = students.iloc[:n_por].reset_index(drop=True)
     mat_students = pd.concat(
-        [students.iloc[:N_SHARED], students.iloc[N_POR:]], ignore_index=True
-    )  # first N_SHARED students take both subjects
+        [students.iloc[:n_shared], students.iloc[n_por:]], ignore_index=True
+    )  # the first n_shared students take both subjects
     return {
         "mat": add_subject_fields(rng, mat_students, "mat"),
         "por": add_subject_fields(rng, por_students, "por"),
@@ -153,12 +169,18 @@ def generate(seed: int = config.RANDOM_STATE) -> dict[str, pd.DataFrame]:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--seed", type=int, default=config.RANDOM_STATE)
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--seed", type=int, default=config.RANDOM_STATE, help="random seed")
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output folder")
+    parser.add_argument("--prefix", default="synthetic", help="file-name prefix")
+    parser.add_argument("--mat-rows", type=int, default=N_MAT, help="Mathematics rows")
+    parser.add_argument("--por-rows", type=int, default=N_POR, help="Portuguese rows")
     args = parser.parse_args(argv)
+    if min(args.mat_rows, args.por_rows) < 1:
+        parser.error("row counts must be at least 1")
     args.out.mkdir(parents=True, exist_ok=True)
-    for subject, frame in generate(args.seed).items():
-        path = args.out / FILE_NAMES[subject]
+    data = generate(args.seed, args.mat_rows, args.por_rows)
+    for subject, frame in data.items():
+        path = args.out / f"{args.prefix}-student-{subject}.csv"
         frame.to_csv(path, sep=config.CSV_SEPARATOR, index=False)
         print(f"Wrote {path} ({len(frame)} rows, pass rate {(frame['G3'] >= 10).mean():.1%})")
     print("These files are SYNTHETIC (computer-generated), not the real UCI dataset.")
